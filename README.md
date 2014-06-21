@@ -26,7 +26,7 @@ requirements:
 
 example built into the module is CVE-2014-0532:
 
-`david@scott ~ $ python cpe_parser.py
+```david@scott ~ $ python cpe_parser.py
 Fetching CVE detail page for CVE-2014-0532
 Top
   Configuration 1
@@ -78,4 +78,4 @@ Top
   Configuration 4
     OR
       <=cpe:/a:adobe:adobe_air_sdk:13.0.0.111*
-        cpe:/a:adobe:adobe_air_sdk:13.0.0.83*`
+        cpe:/a:adobe:adobe_air_sdk:13.0.0.83*```
