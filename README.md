@@ -17,6 +17,9 @@ don't follow requirements -- but please try to. the Apache license is really per
 my copyright and disclaimer and please make attribution if you use my code. please read
 http://en.wikipedia.org/wiki/Apache_License
 
+disclaimer: no dragons were harmed in the making of this module. regardless if you rolled a 20 on your d20, it's a
+game. i'll try to help with problems but your expectations of liability are limited to what you paid me.
+
 Requirements:
 * python3+         (there's really not much in here that is python3 dependent, probably easy to mod for py2)
   *  beautifulsoup4
