@@ -8,8 +8,8 @@ given a block of HTML fetched from a CVE vulnerability page, parse the CPE vulne
 todo:
 * sort CPE entries
 * remove redundant entries
-* build __lt__, __le__, __gt__, __ge__ methods for comparisons
-* build a method for testing a <= b <= c
+* build `__lt__, __le__, __gt__, __ge__` methods for comparisons
+* build a method for testing `a <= b <= c`
 
 
 i realize most people don't pay attention to licenses and requirements. i've no desire to harsh on people that
