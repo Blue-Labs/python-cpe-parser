@@ -25,6 +25,7 @@ requirements:
 
 '''
 
+__all__      = ['VTtree']
 __version__  = '1.0'
 __author__   = 'david ford <david@blue-labs.org> (also: firefighterblu3@gmail.com, rarely read)'
 __copyright  = '2014 '+__author__
