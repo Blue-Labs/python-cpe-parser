@@ -37,7 +37,20 @@ for all the gory details :)
 
 '''
 
+__all__      = ['WFN','LOGICAL']
+__version__  = '1.0'
+__author__   = 'david ford <david@blue-labs.org> (also: firefighterblu3@gmail.com, rarely read)'
+__copyright  = '2014 '+__author__
+__license__  = 'Apache 2.0'
+__released__ = '2014 August 8'
+
+
 import re, string
+try:
+  from enum import Enum
+  LOGICAL = Enum('LOGICAL', 'ANY NA')
+except:
+  raise Exception('You need the "enum34" package, install "enum34". Do not install "enum"')
 
 class WFN(object):
   ''' class for binding and unbinding WFNs
@@ -68,10 +81,6 @@ class WFN(object):
 
     # initialize values
     for k,v in kwargs.items():
-      #if k == 'debug':
-      #  self.debug = v
-      #  continue
-
       if k in ['part','vendor','product','version','update','edition','language',#CPE v2.2
                'sw_edition','target_sw','target_hw','other' # CPE v2.3 extended attributes
               ]:
@@ -88,10 +97,10 @@ class WFN(object):
         # verify alphanum or escaped
 
         if v in ('','-'):
-          v = b'ANY'
+          v = LOGICAL.ANY
 
         if k == 'edition':
-          if v == b'ANY' or not v[0] == '~': # unpacked value
+          if v == LOGICAL.ANY or not v[0] == '~': # unpacked value
             self._debug('bind {}={!r}'.format(k,v))
             setattr(self, k, v)
           else:                    # packed values
@@ -125,12 +134,12 @@ class WFN(object):
 
   def _get(self, k):
     v = self.__dict__.get(k)
-    #if v == b'NA':
+    #if v == LOGICAL.NA:
     #  v = '-'
-    #elif v == b'ANY':
+    #elif v == LOGICAL.ANY:
     #  v = ''
     if v in ('',None):
-      v = b'ANY'
+      v = LOGICAL.ANY
     return v
 
   def _transform_for_uri(self, s):
@@ -156,11 +165,11 @@ class WFN(object):
     return result
 
   def _decode(self, s):
-    if s in (None, '', b'ANY'):
-      return b'ANY'
+    if s in (None, '', LOGICAL.ANY):
+      return LOGICAL.ANY
 
     if s == '-':
-      return b'NA'
+      return LOGICAL.NA
 
     # check for %01? or %02* in s
     # ? can occur repeatedly at the end of a string
@@ -203,8 +212,8 @@ class WFN(object):
   def _bind_value_for_URI(self, v):
     ''' section 6.1.2.3 '''
     # use byte strings to represent the logical values wanted by the spec
-    if v == b'ANY': return ''
-    if v == b'NA':  return '-'
+    if v == LOGICAL.ANY: return ''
+    if v == LOGICAL.NA:  return '-'
     return self._transform_for_uri(v)
 
   def bind_to_URI(self):
@@ -266,8 +275,8 @@ class WFN(object):
         setattr(self, k, v)
       else:
         if not v:
-          setattr(self, k, b'ANY')
-          self._debug('bind {}={}'.format(k, b'ANY'))
+          setattr(self, k, LOGICAL.ANY)
+          self._debug('bind {}={}'.format(k, LOGICAL.ANY))
         elif not v[0] == '~':
           v = self._decode(v)
           self._debug('bind {}={}'.format(k, v))
@@ -277,12 +286,12 @@ class WFN(object):
           v=v[1:]
           for _k in ('edition','sw_edition','target_sw','target_hw'):
             _v, v = v.split('~',1)
-            _v = _v and self._decode(_v) or b'ANY'
+            _v = _v and self._decode(_v) or LOGICAL.ANY
 
             self._debug('bind {}={}'.format(_k, _v))
             setattr(self, _k, _v)
 
-          v = v and self._decode(v) or b'ANY'
+          v = v and self._decode(v) or LOGICAL.ANY
           self._debug('bind {}={}'.format('other',v))
           setattr(self, 'other', v)
 
@@ -306,8 +315,8 @@ class WFN(object):
       self._debug('k is {}'.format(k))
       v = next(_)
       self._debug('v is {!r}'.format(v))
-      if v == '*': v = b'ANY'
-      elif v == '-': v = b'NA'
+      if v == '*': v = LOGICAL.ANY
+      elif v == '-': v = LOGICAL.NA
       else: v = self._add_quoting(v)
 
       self._debug('binding {}={}'.format(k,v))
@@ -338,8 +347,8 @@ class WFN(object):
 
 
   def _bind_value_for_fs(self, v):
-    if v == b'ANY': return '*'
-    if v == b'NA': return '-'
+    if v == LOGICAL.ANY: return '*'
+    if v == LOGICAL.NA: return '-'
     return self._process_quoted_chars(v)
 
   def _process_quoted_chars(self, s):
@@ -366,227 +375,229 @@ class WFN(object):
     return 'cpe:2.3:'+out
 
 
-#'''
-# do some unit testing using the examples at section 6.1.2.4
-# example 1
-foo = WFN(part="a", vendor="microsoft", product="internet_explorer", version="8\.0\.6001",
-          update="beta", edition=b"ANY")
-assert str(foo) == 'cpe:/a:microsoft:internet_explorer:8.0.6001:beta'
+if __name__ == '__main__':
+  # unit testing using the examples at section 6.1.2.4
+  # example 1
+  foo = WFN(part="a", vendor="microsoft", product="internet_explorer", version="8\.0\.6001",
+            update="beta", edition=LOGICAL.ANY)
+  assert str(foo) == 'cpe:/a:microsoft:internet_explorer:8.0.6001:beta'
 
-# example 2
-foo = WFN(part="a", vendor="microsoft",product="internet_explorer", version="8\.*",
-          update="sp?")
-assert str(foo) == 'cpe:/a:microsoft:internet_explorer:8.%02:sp%01'
+  # example 2
+  foo = WFN(part="a", vendor="microsoft",product="internet_explorer", version="8\.*",
+            update="sp?")
+  assert str(foo) == 'cpe:/a:microsoft:internet_explorer:8.%02:sp%01'
 
-# example 3
-foo = WFN(part="a", vendor="hp", product="insight_diagnostics", version="7\.4\.0\.1570",
-          update=b"NA", sw_edition="online", target_sw="win2003", target_hw="x64")
-assert str(foo) == 'cpe:/a:hp:insight_diagnostics:7.4.0.1570:-:~~online~win2003~x64~'
+  # example 3
+  foo = WFN(part="a", vendor="hp", product="insight_diagnostics", version="7\.4\.0\.1570",
+            update=LOGICAL.NA, sw_edition="online", target_sw="win2003", target_hw="x64")
+  assert str(foo) == 'cpe:/a:hp:insight_diagnostics:7.4.0.1570:-:~~online~win2003~x64~'
 
-# example 4
-foo = WFN(part="a", vendor="hp", product="openview_network_manager",
-          version="7\.51", target_sw="linux")
-assert str(foo) == 'cpe:/a:hp:openview_network_manager:7.51::~~~linux~~'
+  # example 4
+  foo = WFN(part="a", vendor="hp", product="openview_network_manager",
+            version="7\.51", target_sw="linux")
+  assert str(foo) == 'cpe:/a:hp:openview_network_manager:7.51::~~~linux~~'
 
-# example 5
-foo = WFN(part="a", vendor=r"foo\\bar", product="big\$money_manager_2010",
-          sw_edition="special",target_sw="ipod_touch",target_hw="80gb")
-assert str(foo) == 'cpe:/a:foo%5cbar:big%24money_manager_2010:::~~special~ipod_touch~80gb~'
+  # example 5
+  foo = WFN(part="a", vendor=r"foo\\bar", product="big\$money_manager_2010",
+            sw_edition="special",target_sw="ipod_touch",target_hw="80gb")
+  assert str(foo) == 'cpe:/a:foo%5cbar:big%24money_manager_2010:::~~special~ipod_touch~80gb~'
 
-# Now unit test URI unbinding, see section 6.1.3.3
-# example 1
-foo = WFN('cpe:/a:microsoft:internet_explorer:8.0.6001:beta')
-assert (foo.part     == 'a' and
-        foo.vendor   == 'microsoft' and
-        foo.product  == 'internet_explorer' and
-        foo.version  == '8\.0\.6001' and
-        foo.update   == 'beta' and
-        foo.edition  == b'ANY' and
-        foo.language == b'ANY'
-       ), 'WFN.unbind_URI() did not produce expected output'
+  # Now unit test URI unbinding, see section 6.1.3.3
+  # example 1
+  foo = WFN('cpe:/a:microsoft:internet_explorer:8.0.6001:beta')
+  assert (foo.part     == 'a' and
+          foo.vendor   == 'microsoft' and
+          foo.product  == 'internet_explorer' and
+          foo.version  == '8\.0\.6001' and
+          foo.update   == 'beta' and
+          foo.edition  == LOGICAL.ANY and
+          foo.language == LOGICAL.ANY
+         ), 'WFN.unbind_URI() did not produce expected output'
 
-# example 2
-foo = WFN('cpe:/a:microsoft:internet_explorer:8.%2a:sp%3f')
-assert (foo.part     == 'a' and
-        foo.vendor   == 'microsoft' and
-        foo.product  == 'internet_explorer' and
-        foo.version  == '8\.\*' and
-        foo.update   == 'sp\?' and
-        foo.edition  == b'ANY' and
-        foo.language == b'ANY'
-       ), 'WFN.unbind_URI() did not produce expected output'
+  # example 2
+  foo = WFN('cpe:/a:microsoft:internet_explorer:8.%2a:sp%3f')
+  assert (foo.part     == 'a' and
+          foo.vendor   == 'microsoft' and
+          foo.product  == 'internet_explorer' and
+          foo.version  == '8\.\*' and
+          foo.update   == 'sp\?' and
+          foo.edition  == LOGICAL.ANY and
+          foo.language == LOGICAL.ANY
+         ), 'WFN.unbind_URI() did not produce expected output'
 
-# example 3
-foo = WFN('cpe:/a:microsoft:internet_explorer:8.%02:sp%01')
-assert (foo.part     == 'a' and
-        foo.vendor   == 'microsoft' and
-        foo.product  == 'internet_explorer' and
-        foo.version  == '8\.*' and
-        foo.update   == 'sp?' and
-        foo.edition  == b'ANY' and
-        foo.language == b'ANY'
-       ), 'WFN.unbind_URI() did not produce expected output'
+  # example 3
+  foo = WFN('cpe:/a:microsoft:internet_explorer:8.%02:sp%01')
+  assert (foo.part     == 'a' and
+          foo.vendor   == 'microsoft' and
+          foo.product  == 'internet_explorer' and
+          foo.version  == '8\.*' and
+          foo.update   == 'sp?' and
+          foo.edition  == LOGICAL.ANY and
+          foo.language == LOGICAL.ANY
+         ), 'WFN.unbind_URI() did not produce expected output'
 
-# example 4
-#foo = WFN('cpe:/a:hp:insight_diagnostics:7.4.0.1570::~~online~win2003~x64~', debug=True)
-foo = WFN('cpe:/a:hp:insight_diagnostics:7.4.0.1570::~~online~win2003~x64~')
-assert (foo.part       == 'a' and
-        foo.vendor     == 'hp' and
-        foo.product    == 'insight_diagnostics' and
-        foo.version    == '7\.4\.0\.1570' and
-        foo.update     == b'ANY' and
-        foo.edition    == b'ANY' and
-        foo.sw_edition == 'online' and
-        foo.target_sw  == 'win2003' and
-        foo.target_hw  == 'x64' and
-        foo.other      == b'ANY' and
-        foo.language   == b'ANY'
-       ), 'WFN.unbind_URI() did not produce expected output'
+  # example 4
+  #foo = WFN('cpe:/a:hp:insight_diagnostics:7.4.0.1570::~~online~win2003~x64~', debug=True)
+  foo = WFN('cpe:/a:hp:insight_diagnostics:7.4.0.1570::~~online~win2003~x64~')
+  assert (foo.part       == 'a' and
+          foo.vendor     == 'hp' and
+          foo.product    == 'insight_diagnostics' and
+          foo.version    == '7\.4\.0\.1570' and
+          foo.update     == LOGICAL.ANY and
+          foo.edition    == LOGICAL.ANY and
+          foo.sw_edition == 'online' and
+          foo.target_sw  == 'win2003' and
+          foo.target_hw  == 'x64' and
+          foo.other      == LOGICAL.ANY and
+          foo.language   == LOGICAL.ANY
+         ), 'WFN.unbind_URI() did not produce expected output'
 
-# example 5
-foo = WFN('cpe:/a:hp:openview_network_manager:7.51:-:~~~linux~~')
-assert (foo.part       == 'a' and
-        foo.vendor     == 'hp' and
-        foo.product    == 'openview_network_manager' and
-        foo.version    == '7\.51' and
-        foo.update     == b'NA' and
-        foo.edition    == b'ANY' and
-        foo.sw_edition == b'ANY' and
-        foo.target_sw  == 'linux' and
-        foo.target_hw  == b'ANY' and
-        foo.other      == b'ANY' and
-        foo.language   == b'ANY'
-       ), 'WFN.unbind_URI() did not produce expected output'
+  # example 5
+  foo = WFN('cpe:/a:hp:openview_network_manager:7.51:-:~~~linux~~')
+  assert (foo.part       == 'a' and
+          foo.vendor     == 'hp' and
+          foo.product    == 'openview_network_manager' and
+          foo.version    == '7\.51' and
+          foo.update     == LOGICAL.NA and
+          foo.edition    == LOGICAL.ANY and
+          foo.sw_edition == LOGICAL.ANY and
+          foo.target_sw  == 'linux' and
+          foo.target_hw  == LOGICAL.ANY and
+          foo.other      == LOGICAL.ANY and
+          foo.language   == LOGICAL.ANY
+         ), 'WFN.unbind_URI() did not produce expected output'
 
-# example 6
-try:
-  foo = WFN('cpe:/a:foo%5cbar:big%24money_2010%07:::~~special~ipod_touch~80gb~')
-  raise ValueError('WFN failed to reject invalid %07')
-except ValueError as e:
-  if not str(e) == 'illegal percent encoding: 0x7':
-    raise
+  # example 6
+  try:
+    foo = WFN('cpe:/a:foo%5cbar:big%24money_2010%07:::~~special~ipod_touch~80gb~')
+    raise ValueError('WFN failed to reject invalid %07')
+  except ValueError as e:
+    if not str(e) == 'illegal percent encoding: 0x7':
+      raise
 
-# example 7
-foo = WFN('cpe:/a:foo~bar:big%7emoney_2010')
-assert (foo.part       == 'a' and
-        foo.vendor     == 'foo\~bar' and
-        foo.product    == 'big\~money_2010' and
-        foo.version    == b'ANY' and
-        foo.update     == b'ANY' and
-        foo.edition    == b'ANY' and
-        foo.language   == b'ANY'
-       ), 'WFN.unbind_URI() did not produce expected output'
+  # example 7
+  foo = WFN('cpe:/a:foo~bar:big%7emoney_2010')
+  assert (foo.part       == 'a' and
+          foo.vendor     == 'foo\~bar' and
+          foo.product    == 'big\~money_2010' and
+          foo.version    == LOGICAL.ANY and
+          foo.update     == LOGICAL.ANY and
+          foo.edition    == LOGICAL.ANY and
+          foo.language   == LOGICAL.ANY
+         ), 'WFN.unbind_URI() did not produce expected output'
 
-# example 8
-try:
-  foo = WFN('cpe:/a:foo:bar:12.%02.1234')
-  print(foo)
-  raise ValueError('WFN failed to reject invalid embedded %02')
-except ValueError as e:
-  if not str(e) == '* can only occur once at the beginning and/or end of the value':
-    raise
+  # example 8
+  try:
+    foo = WFN('cpe:/a:foo:bar:12.%02.1234')
+    print(foo)
+    raise ValueError('WFN failed to reject invalid embedded %02')
+  except ValueError as e:
+    if not str(e) == '* can only occur once at the beginning and/or end of the value':
+      raise
 
-# test binding WFN to a formatted string, section 6.2.2.3
-# example 1
-foo = WFN(part='a', vendor='microsoft', product='internet_explorer', version='8\.0\.6001',
-          update='beta', edition=b'ANY')
-_foo = foo.bind_to_fs()
-assert (_foo == 'cpe:2.3:a:microsoft:internet_explorer:8.0.6001:beta:*:*:*:*:*:*'
-       ), 'WFN.bind_to_fs() failed to correctly assemble the Formatted String'
+  # test binding WFN to a formatted string, section 6.2.2.3
+  # example 1
+  foo = WFN(part='a', vendor='microsoft', product='internet_explorer', version='8\.0\.6001',
+            update='beta', edition=LOGICAL.ANY)
+  _foo = foo.bind_to_fs()
+  assert (_foo == 'cpe:2.3:a:microsoft:internet_explorer:8.0.6001:beta:*:*:*:*:*:*'
+         ), 'WFN.bind_to_fs() failed to correctly assemble the Formatted String'
 
-# example 2
-foo = WFN(part='a', vendor='microsoft', product='internet_explorer', version='8\.\*',
-          update='sp?')
-_foo = foo.bind_to_fs()
-assert (_foo == 'cpe:2.3:a:microsoft:internet_explorer:8.\\*:sp?:*:*:*:*:*:*'
-       ), 'WFN.bind_to_fs() failed to correctly assemble the Formatted String'
+  # example 2
+  foo = WFN(part='a', vendor='microsoft', product='internet_explorer', version='8\.\*',
+            update='sp?')
+  _foo = foo.bind_to_fs()
+  assert (_foo == 'cpe:2.3:a:microsoft:internet_explorer:8.\\*:sp?:*:*:*:*:*:*'
+         ), 'WFN.bind_to_fs() failed to correctly assemble the Formatted String'
 
-# example 3
-foo = WFN(part='a', vendor='hp', product='insight', version='7\.4\.0\.1570', update=b'NA',
-          sw_edition='online', target_sw='win2003', target_hw='x64')
-_foo = foo.bind_to_fs()
-assert (_foo == 'cpe:2.3:a:hp:insight:7.4.0.1570:-:*:*:online:win2003:x64:*'
-       ), 'WFN.bind_to_fs() failed to correctly assemble the Formatted String'
+  # example 3
+  foo = WFN(part='a', vendor='hp', product='insight', version='7\.4\.0\.1570', update=LOGICAL.NA,
+            sw_edition='online', target_sw='win2003', target_hw='x64')
+  _foo = foo.bind_to_fs()
+  assert (_foo == 'cpe:2.3:a:hp:insight:7.4.0.1570:-:*:*:online:win2003:x64:*'
+         ), 'WFN.bind_to_fs() failed to correctly assemble the Formatted String'
 
-# example 4
-foo = WFN(part='a', vendor='hp', product='openview_network_manager', version='7\.51',
-          target_sw='linux')
-_foo = foo.bind_to_fs()
-assert (_foo == 'cpe:2.3:a:hp:openview_network_manager:7.51:*:*:*:*:linux:*:*'
-       ), 'WFN.bind_to_fs() failed to correctly assemble the Formatted String'
+  # example 4
+  foo = WFN(part='a', vendor='hp', product='openview_network_manager', version='7\.51',
+            target_sw='linux')
+  _foo = foo.bind_to_fs()
+  assert (_foo == 'cpe:2.3:a:hp:openview_network_manager:7.51:*:*:*:*:linux:*:*'
+         ), 'WFN.bind_to_fs() failed to correctly assemble the Formatted String'
 
-# example 5
-foo = WFN(part='a', vendor='foo\\bar', product='big\$money_2010', sw_edition='special',
-          target_sw='ipod_touch', target_hw='80gb')
-_foo = foo.bind_to_fs()
-assert (_foo == 'cpe:2.3:a:foo\\bar:big\$money_2010:*:*:*:*:special:ipod_touch:80gb:*'
-       ), 'WFN.bind_to_fs() failed to correctly assemble the Formatted String'
+  # example 5
+  foo = WFN(part='a', vendor='foo\\bar', product='big\$money_2010', sw_edition='special',
+            target_sw='ipod_touch', target_hw='80gb')
+  _foo = foo.bind_to_fs()
+  assert (_foo == 'cpe:2.3:a:foo\\bar:big\$money_2010:*:*:*:*:special:ipod_touch:80gb:*'
+         ), 'WFN.bind_to_fs() failed to correctly assemble the Formatted String'
 
-# binding WFN to a formatted string, section 6.2.3.3
-# example 1
-foo = WFN('cpe:2.3:a:microsoft:internet_explorer:8.0.6001:beta:*:*:*:*:*:*')
-assert (foo.part       == 'a' and
-        foo.vendor     == 'microsoft' and
-        foo.product    == 'internet_explorer' and
-        foo.version    == '8\.0\.6001' and
-        foo.update     == 'beta' and
-        foo.edition    == b'ANY' and
-        foo.language   == b'ANY' and
-        foo.sw_edition == b'ANY' and
-        foo.target_sw  == b'ANY' and
-        foo.target_hw  == b'ANY' and
-        foo.other      == b'ANY'
-       ), 'WFN.unbind_URI() did not produce expected output'
+  # binding WFN to a formatted string, section 6.2.3.3
+  # example 1
+  foo = WFN('cpe:2.3:a:microsoft:internet_explorer:8.0.6001:beta:*:*:*:*:*:*')
+  assert (foo.part       == 'a' and
+          foo.vendor     == 'microsoft' and
+          foo.product    == 'internet_explorer' and
+          foo.version    == '8\.0\.6001' and
+          foo.update     == 'beta' and
+          foo.edition    == LOGICAL.ANY and
+          foo.language   == LOGICAL.ANY and
+          foo.sw_edition == LOGICAL.ANY and
+          foo.target_sw  == LOGICAL.ANY and
+          foo.target_hw  == LOGICAL.ANY and
+          foo.other      == LOGICAL.ANY
+         ), 'WFN.unbind_URI() did not produce expected output'
 
-# example 2
-foo = WFN('cpe:2.3:a:microsoft:internet_explorer:8.*:sp?:*:*:*:*:*:*')
-assert (foo.part       == 'a' and
-        foo.vendor     == 'microsoft' and
-        foo.product    == 'internet_explorer' and
-        foo.version    == '8\.*' and
-        foo.update     == 'sp?' and
-        foo.edition    == b'ANY' and
-        foo.language   == b'ANY' and
-        foo.sw_edition == b'ANY' and
-        foo.target_sw  == b'ANY' and
-        foo.target_hw  == b'ANY' and
-        foo.other      == b'ANY'
-       ), 'WFN.unbind_URI() did not produce expected output'
+  # example 2
+  foo = WFN('cpe:2.3:a:microsoft:internet_explorer:8.*:sp?:*:*:*:*:*:*')
+  assert (foo.part       == 'a' and
+          foo.vendor     == 'microsoft' and
+          foo.product    == 'internet_explorer' and
+          foo.version    == '8\.*' and
+          foo.update     == 'sp?' and
+          foo.edition    == LOGICAL.ANY and
+          foo.language   == LOGICAL.ANY and
+          foo.sw_edition == LOGICAL.ANY and
+          foo.target_sw  == LOGICAL.ANY and
+          foo.target_hw  == LOGICAL.ANY and
+          foo.other      == LOGICAL.ANY
+         ), 'WFN.unbind_URI() did not produce expected output'
 
-# example 3
-foo = WFN('cpe:2.3:a:hp:insight_diagnostics:7.4.0.1570:-:*:*:online:win2003:x64:*')
-assert (foo.part       == 'a' and
-        foo.vendor     == 'hp' and
-        foo.product    == 'insight_diagnostics' and
-        foo.version    == '7\.4\.0\.1570' and
-        foo.update     == b'NA' and
-        foo.edition    == b'ANY' and
-        foo.language   == b'ANY' and
-        foo.sw_edition == 'online' and
-        foo.target_sw  == 'win2003' and
-        foo.target_hw  == 'x64' and
-        foo.other      == b'ANY'
-       ), 'WFN.unbind_URI() did not produce expected output'
+  # example 3
+  foo = WFN('cpe:2.3:a:hp:insight_diagnostics:7.4.0.1570:-:*:*:online:win2003:x64:*')
+  assert (foo.part       == 'a' and
+          foo.vendor     == 'hp' and
+          foo.product    == 'insight_diagnostics' and
+          foo.version    == '7\.4\.0\.1570' and
+          foo.update     == LOGICAL.NA and
+          foo.edition    == LOGICAL.ANY and
+          foo.language   == LOGICAL.ANY and
+          foo.sw_edition == 'online' and
+          foo.target_sw  == 'win2003' and
+          foo.target_hw  == 'x64' and
+          foo.other      == LOGICAL.ANY
+         ), 'WFN.unbind_URI() did not produce expected output'
 
-# also example 3
-try:
-  foo = WFN('cpe:2.3:a:hp:insight_diagnostics:7.4.*.1570:-:*:*:*:*:*:*')
-  raise ValueError('WFN failed to reject invalid data')
-except ValueError as e:
-  if not str(e) == '* can only occur once at the beginning and/or end of the value':
-    raise
+  # also example 3
+  try:
+    foo = WFN('cpe:2.3:a:hp:insight_diagnostics:7.4.*.1570:-:*:*:*:*:*:*')
+    raise ValueError('WFN failed to reject invalid data')
+  except ValueError as e:
+    if not str(e) == '* can only occur once at the beginning and/or end of the value':
+      raise
 
-# example 4
-foo = WFN('cpe:2.3:a:foo\\bar:big\$money:2010:*:*:*:special:ipod_touch:80gb:*')
-assert (foo.part       == 'a' and
-        foo.vendor     == 'foo\\bar' and
-        foo.product    == 'big\$money' and
-        foo.version    == '2010' and
-        foo.update     == b'ANY' and
-        foo.edition    == b'ANY' and
-        foo.language   == b'ANY' and
-        foo.sw_edition == 'special' and
-        foo.target_sw  == 'ipod_touch' and
-        foo.target_hw  == '80gb' and
-        foo.other      == b'ANY'
-       ), 'WFN.unbind_URI() did not produce expected output'
+  # example 4
+  foo = WFN('cpe:2.3:a:foo\\bar:big\$money:2010:*:*:*:special:ipod_touch:80gb:*')
+  assert (foo.part       == 'a' and
+          foo.vendor     == 'foo\\bar' and
+          foo.product    == 'big\$money' and
+          foo.version    == '2010' and
+          foo.update     == LOGICAL.ANY and
+          foo.edition    == LOGICAL.ANY and
+          foo.language   == LOGICAL.ANY and
+          foo.sw_edition == 'special' and
+          foo.target_sw  == 'ipod_touch' and
+          foo.target_hw  == '80gb' and
+          foo.other      == LOGICAL.ANY
+         ), 'WFN.unbind_URI() did not produce expected output'
+
+  print('All section tests of NISTIR 7695 passed successfully')
