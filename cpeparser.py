@@ -26,11 +26,11 @@ requirements:
 '''
 
 __all__      = ['VTtree']
-__version__  = '1.0'
+__version__  = '1.1'
 __author__   = 'david ford <david@blue-labs.org> (also: firefighterblu3@gmail.com, rarely read)'
-__copyright  = '2014 '+__author__
+__copyright  = '2015 '+__author__
 __license__  = 'Apache 2.0'
-__released__ = '2014 June 21'
+__released__ = '2015 Feb 6'
 
 import sys, re, time, traceback
 from bs4 import BeautifulSoup
@@ -49,25 +49,25 @@ class VTunit(object):
     '''Method properties:
     name   - set to one of three things; ['Configuration \d+', 'AND', 'OR']
     parent - the parent node of this subtree
-    
+
     Additional properties are 'sub' and 'cpe' and are established as needed
     Properties of 'cpe' are: {'vulnerable', 'cpe', 'previous', 'future'}
 
     If there is an '*' prefixing a CPE entry on the NVD website, that means the listed version is vulnerable.
-        
+
     If "and previous versions" suffixes the CPE tree, this indicates that all versions older than this version
     are vulnerable|not vulnerable (per '*' flag)
-        
+
     Same for "and future versions" (text may change when I encounter such a beastie)
     '''
     def __init__(self, name=None, parent=None):
         self.name   = name
         self.parent = parent
-    
+
     def __contains__(self, k):
         if k in self.__dict__:
             return True
-    
+
     def descend(self, name):
         ''' create a descendent; append it to our sub list, then set its parent to ourself
         '''
@@ -75,7 +75,7 @@ class VTunit(object):
         if not 'sub' in self: self.sub = []
         self.sub.append(sub)
         return sub
-    
+
     def __str__(self):
         ''' Parses itself for printing, recursively descending and printing the whole tree in logical order.
         '''
@@ -84,9 +84,9 @@ class VTunit(object):
         while __p:
             __indent += 2
             __p = __p.parent
-        
+
         __s=[]
-            
+
         __s.append('{}{}'.format(' '*__indent, self.name))
 
         if 'sub' in self:
@@ -98,17 +98,27 @@ class VTunit(object):
                 __pv = ('previous'   in __cpe and __cpe['previous'])   and '<=' or '  '
                 __c = __cpe['cpe']
                 __s.append('  {}{}{}{}'.format(' '*__indent,__pv,__c,__vn))
-            
+
         return '\n'.join(__s)
-    
+
+    def sort(self):
+        ''' sort my list of cpe entries
+            ** NOT FUNCTIONAL YET **
+        '''
+        if not 'cpe' in self:
+            return
+
+        for __cpe in self.cpe:
+            pass
+
 
 class VTtree():
     def __init__(self):
         pass
-    
+
     def __contains__(self, k):
         pass
-    
+
     def __lt__(self, k):
         pass
 
@@ -125,31 +135,33 @@ class VTtree():
         ''' Find configuration trees. These are NOT ordered by heirarchy in the HTML, they are linear. Additionally, NVD
         folks use javascript to rewrite tables with enclosing divs. so in the browser, instead of 52 sibling tables,
         you'll see 8 tables with intermixed divs (ref: CVE-2014-0532)
-    
+
         Input:
           content - chunk of HTMl to parse
-    
+
         Returns:
-          VTunit() class representing parsed tree
+          nothing, appends a VTunit() class representing parsed tree to self
 
         '''
-    
+
         if not content:
             return
-    
+
         self.tree = VTunit()
         self.tree.name = 'Top'
+        
+        soup = BeautifulSoup(content, 'lxml').body
+        soup = soup.find('div', id=
+            'BodyPlaceHolder_cplPageContent_plcZones_lt_zoneCenter'+
+            '_VulnerabilityDetail_VulnFormView_VulnConfigurationsDiv')
 
-        soup = BeautifulSoup(content, 'lxml').body.find('div', id=
-            'BodyPlaceHolder_cplPageContent_plcZones_lt_zoneCenter_VulnerabilityDetail_VulnFormView_VulnSoftwareTreeView')
-
-        e_list = soup.find_all('a', text=re.compile('(Configuration \d+|AND|OR|\*|cpe:)'))
+        e_list = soup.find_all(text=re.compile('(Configuration \d+|AND|OR|\*|cpe:)'))
         self.e_list_i = iter(e_list)
 
         # start the show
         self._descend_tree(next(self.e_list_i), self.tree)
 
-    
+
     def print(self):
         print(self.tree)
 
@@ -160,12 +172,15 @@ class VTtree():
 
         while e:
             _ = e.string.strip()
+            if _.startswith('+ '):
+                _ = _[2:]
 
             if 'cpe' in tree_node and not _[0] in ('*','c','a'):
                 tree_node.cpe.append(cpe)
                 return e
-            
+
             elif _.startswith('Configuration'):
+                # data from last pass? store it
                 if cpe:
                     if not 'cpe' in tree_node: tree_node.cpe = []
                     tree_node.cpe.append(cpe)
@@ -178,6 +193,7 @@ class VTtree():
                 continue
 
             elif _ in ('AND','OR'):
+                # data from last pass? store it
                 if cpe:
                     if not 'cpe' in tree_node: tree_node.cpe = []
                     tree_node.cpe.append(cpe)
@@ -188,6 +204,7 @@ class VTtree():
 
             # brand new cpe line found
             elif _ == '*':
+                # data from last pass? store it
                 if cpe:
                     if not 'cpe' in tree_node: tree_node.cpe = []
                     tree_node.cpe.append(cpe)
@@ -196,7 +213,7 @@ class VTtree():
 
             elif _.startswith('cpe:'):
                 if not 'cpe' in tree_node: tree_node.cpe = []
-                
+
                 # concat version suffix using '_' for our gentoo based version sorting
                 try:
                     _v = _.split(':',5)
@@ -212,25 +229,28 @@ class VTtree():
                 if cpe and 'cpe' in cpe:
                     tree_node.cpe.append(cpe)
                     cpe = {}
-                
+
                 cpe['cpe'] = _
-                
+
                 # soup doesn't find sibling post-pended text in a wrongly built tag.
                 # for example: <a>foo<a>bar</a>bum</a>, so we navigate to it ourselves
 
                 suffixtext = [x for x in e.parent.children if isinstance(x,NavigableString)]
                 if suffixtext and suffixtext[-1] == ' and previous versions':
                     cpe['previous'] = True
-                
+
                 # does this type of rule exist?
                 if suffixtext and suffixtext[-1] == ' and future versions':
                     cpe['future'] = True
-                
+
                 pfx = ('vulnerable' in cpe and cpe['vulnerable']) and '* ' or ''
                 pvv = ('previous' in cpe and cpe['previous']) and '<= ' or ''
 
                 #print('{}{}{} added to {}'.format(pfx,pvv,_,v.name))
             
+            elif _ == '* Denotes Vulnerable Software': # ignore this line
+                pass
+
             else:
                 raise Exception('unexpected content encountered: {}'.format(_))
 
@@ -242,17 +262,24 @@ class VTtree():
 
 
 
+
 def main():
     import httplib2
 
     # make sure your user has r/w access to this cache directory, or omit it
     http = httplib2.Http('/var/cache/vd-feeds')
-    
+
     print('Fetching CVE detail page for CVE-2014-0532')
     
-    try:
+    # hardwired to skip the cache, WEB.NVD.NIST.GOV can be damned slow even for HEAD requests
+    if False:
+      with open('/tmp/CVE-2014-0532.html', 'rb') as f:
+         content = f.read()
+
+    else:
+      try:
         response, content = http.request('http://web.nvd.nist.gov/view/vuln/detail?vulnId=CVE-2014-0532')
-    except:
+      except:
         t,v,tb = sys.exc_info()
         print('Could not fetch http://web.nvd.nist.gov/view/vuln/detail?vulnId=CVE-2014-0532: {}'.format(v))
         return
@@ -260,7 +287,7 @@ def main():
     VT = VTtree()
     VT.parse(content)
     VT.print()
-
+    
 
 if __name__ == '__main__':
     main()
