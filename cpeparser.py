@@ -26,16 +26,17 @@ requirements:
 '''
 
 __all__      = ['VTtree']
-__version__  = '1.1'
+__version__  = '1.2'
 __author__   = 'david ford <david@blue-labs.org> (also: firefighterblu3@gmail.com, rarely read)'
 __copyright  = '2015 '+__author__
 __license__  = 'Apache 2.0'
-__released__ = '2015 Feb 6'
+__released__ = '2015 Feb 8'
 
-import sys, re, time, traceback
+import sys, re, time, traceback, httplib2
 from bs4 import BeautifulSoup
 from bs4.element import Tag, NavigableString
 from pprint import pprint
+from urllib.parse import urlencode
 
 # borrowed from gentoo portage
 _v   = r'(cvs\.)?(\d+)((\.\d+)*)([a-z]?)((_(pre|p|beta|alpha|rc)\d*)*)'
@@ -164,6 +165,44 @@ class VTtree():
 
     def print(self):
         print(self.tree)
+    
+
+    def _iter_nodes(self, node):
+        yield node
+        if 'sub' in node:
+            for _node in node.sub:
+                for __ in self._iter_nodes(_node):
+                    yield __
+    
+    
+    def get_vulnerable_software_names(self):
+        _list = []
+        for node in self._iter_nodes(self.tree):
+            if 'cpe' in node:
+                for __cpe in node.cpe:
+                    if 'vulnerable' in __cpe and __cpe['cpe'][5] == 'a':
+                        http = httplib2.Http()
+                        
+                        # this URL is semi private and subject to change at any time
+                        # please contact <david@blue-labs.org> if you need access to a
+                        # cpe to title mapping database
+                        # cpename should be in the form of:  'cpe:/a:adobe:flash_player:11.2.202.251'
+                        # and you'll get a response of:      'Adobe Flash Player'
+                        cpename = __cpe['cpe']
+                        resp,content = http.request('https://api.security-carpet.com:1443/cpe_to_title',
+                                                    'POST',
+                                                    urlencode({'cpe':cpename}),
+                                                    headers={'Content-Type':'text/plain'},
+                                                    )
+
+                        if resp['status'] == '200':
+                            _list.append(content.decode())
+                        else:
+                            print('problem fetching cpe title, response follows:')
+                            pprint(resp)
+                            print('{!r}'.format(content))
+
+        return sorted(set(_list))
 
 
     def _descend_tree(self, e, tree_node):
@@ -272,7 +311,7 @@ def main():
     print('Fetching CVE detail page for CVE-2014-0532')
     
     # hardwired to skip the cache, WEB.NVD.NIST.GOV can be damned slow even for HEAD requests
-    if False:
+    if True:
       with open('/tmp/CVE-2014-0532.html', 'rb') as f:
          content = f.read()
 
@@ -287,6 +326,7 @@ def main():
     VT = VTtree()
     VT.parse(content)
     VT.print()
+    print(VT.get_vulnerable_software_names())
     
 
 if __name__ == '__main__':
