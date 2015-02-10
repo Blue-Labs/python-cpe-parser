@@ -26,13 +26,13 @@ requirements:
 '''
 
 __all__      = ['VTtree']
-__version__  = '1.2'
+__version__  = '1.3'
 __author__   = 'david ford <david@blue-labs.org> (also: firefighterblu3@gmail.com, rarely read)'
 __copyright  = '2015 '+__author__
 __license__  = 'Apache 2.0'
-__released__ = '2015 Feb 8'
+__released__ = '2015 Feb 10'
 
-import sys, re, time, traceback, httplib2
+import sys, os, re, time, traceback, httplib2
 from bs4 import BeautifulSoup
 from bs4.element import Tag, NavigableString
 from pprint import pprint
@@ -114,7 +114,8 @@ class VTunit(object):
 
 
 class VTtree():
-    def __init__(self):
+    def __init__(self, vid=None):
+        self.vid = vid
         pass
 
     def __contains__(self, k):
@@ -177,10 +178,11 @@ class VTtree():
     
     def get_vulnerable_software_names(self):
         _list = []
+        _bad_cpes = []
         for node in self._iter_nodes(self.tree):
             if 'cpe' in node:
                 for __cpe in node.cpe:
-                    if 'vulnerable' in __cpe and __cpe['cpe'][5] == 'a':
+                    if 'vulnerable' in __cpe:
                         http = httplib2.Http()
                         
                         # this URL is semi private and subject to change at any time
@@ -195,12 +197,26 @@ class VTtree():
                                                     headers={'Content-Type':'text/plain'},
                                                     )
 
-                        if resp['status'] == '200':
-                            _list.append(content.decode())
+                        if not resp['status'] == '200':
+                            if not resp['status'] == '404':
+                                print('problem fetching cpe title, response follows:')
+                                pprint(resp)
+                                print('{!r}'.format(content))
+                            _bad_cpes.append(__cpe['cpe'])
                         else:
-                            print('problem fetching cpe title, response follows:')
-                            pprint(resp)
-                            print('{!r}'.format(content))
+                            _list.append(content.decode())
+
+
+        # command line fixups
+        title = 'eh?'
+        if len(sys.argv) > 2:
+            title = sys.argv[2]
+
+        _bad_cpes.sort()
+        for _ in _bad_cpes:
+          print("insert into cpe_names values ('{}','en-US','{}');".format(_,title))
+        for _ in _bad_cpes:
+          print("        ('{}','en-US','{}'),".format(_,title))
 
         return sorted(set(_list))
 
@@ -269,6 +285,10 @@ class VTtree():
                     tree_node.cpe.append(cpe)
                     cpe = {}
 
+                # fixups, sigh. expect many more to come. CVE web pages don't match CPE dictionary.
+                # p.p.s. expect this to vanish, I'll just duplicate the CPE entries
+                if _.startswith('cpe:/a:larry_wall:perl:'):
+                    _ = _.replace('cpe:/a:larry_wall:perl:', 'cpe:/a:perl:perl:')
                 cpe['cpe'] = _
 
                 # soup doesn't find sibling post-pended text in a wrongly built tag.
@@ -282,9 +302,17 @@ class VTtree():
                 if suffixtext and suffixtext[-1] == ' and future versions':
                     cpe['future'] = True
 
+                # fixups
+                if self.vid:
+                    if self.vid == 'CVE-2004-1296' and cpe['cpe'] == 'cpe:/a:gnu:groff:1.18.1':
+                        cpe['vulnerable'] = True
+                    if self.vid == 'CVE-2006-7247' and cpe['cpe'] == 'cpe:/a:mambo-foundation:mambo:-':
+                        cpe['vulnerable'] = True
+                
+
                 pfx = ('vulnerable' in cpe and cpe['vulnerable']) and '* ' or ''
                 pvv = ('previous' in cpe and cpe['previous']) and '<= ' or ''
-
+                
                 #print('{}{}{} added to {}'.format(pfx,pvv,_,v.name))
             
             elif _ == '* Denotes Vulnerable Software': # ignore this line
@@ -304,26 +332,33 @@ class VTtree():
 
 def main():
     import httplib2
+    
+    if len(sys.argv) >1:
+        vid = sys.argv[1]
+    else:
+        vid='CVE-2009-4307'
 
     # make sure your user has r/w access to this cache directory, or omit it
     http = httplib2.Http('/var/cache/vd-feeds')
 
-    print('Fetching CVE detail page for CVE-2014-0532')
+    print('Fetching CVE detail page for {}'.format(vid))
     
     # hardwired to skip the cache, WEB.NVD.NIST.GOV can be damned slow even for HEAD requests
-    if True:
-      with open('/tmp/CVE-2014-0532.html', 'rb') as f:
+    if True and os.path.exists('/tmp/{}.html'.format(vid)):
+      with open('/tmp/{}.html'.format(vid), 'rb') as f:
          content = f.read()
 
     else:
       try:
-        response, content = http.request('http://web.nvd.nist.gov/view/vuln/detail?vulnId=CVE-2014-0532')
+        response, content = http.request('http://web.nvd.nist.gov/view/vuln/detail?vulnId={}'.format(vid))
+        with open('/tmp/{}.html'.format(vid), 'wb') as f:
+          f.write(content)
       except:
         t,v,tb = sys.exc_info()
-        print('Could not fetch http://web.nvd.nist.gov/view/vuln/detail?vulnId=CVE-2014-0532: {}'.format(v))
+        print('Could not fetch http://web.nvd.nist.gov/view/vuln/detail?vulnId={}: {}'.format(vid, v))
         return
 
-    VT = VTtree()
+    VT = VTtree(vid)
     VT.parse(content)
     VT.print()
     print(VT.get_vulnerable_software_names())
